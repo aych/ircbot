@@ -1,0 +1,6 @@
+config.py
+*.pyc
+.idea/*
+*.save
+plugins/data/*
+plugins/mysqltest.py

@@ -1,0 +1,9 @@
+IRC_SERVER = 'irc.freenode.net'
+IRC_PORT = 6667
+
+IRC_NICK = 'nick'
+IRC_ALT_NICK = 'nick_'
+IRC_USERNAME = 'nick'
+IRC_REALNAME = 'nick'
+
+AUTOLOAD = ['auth']
