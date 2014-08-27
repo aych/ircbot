@@ -7,4 +7,3 @@ plugins/mysqltest.py*
 plugins/dnsbrute.py
 plugins/ircgearman.py
 plugins/test*
-plugins/data/dnslist.txt
