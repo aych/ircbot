@@ -1,10 +1,12 @@
 import pickle
 import re
 
-class OpCount():
-    def __init__(self, irc, plugins):
+PLUGIN_CLASS = 'OpCount'
+
+class OpCount(object):
+    def __init__(self, irc):
         self.irc = irc
-        self.plugins = plugins
+        self.plugins = irc.plugins
         self.irc.on_mode_change += self.irc_mode_change
         self.irc.on_command += self.irc_command
         self.op_table = {}
@@ -20,6 +22,7 @@ class OpCount():
         pickle.dump(self.op_table, open('plugins/data/op_table.pkl', 'wb'))
         self.irc.on_mode_change -= self.irc_mode_change
         self.irc.on_command -= self.irc_command
+        return True
 
     def color(self, text):
         text = text.replace('{bold}', '\x02')
@@ -106,17 +109,3 @@ class OpCount():
             #if op_count == 3:
                 #self.irc.privmsg(destination,
                 #                 self.color("[{yellow}]{bold}+3{bold}{reset} [{green}]%s{reset} scores a hat trick [{yellow}]{bold}+3{bold}" % nick))
-
-def initialize(irc, plugins):
-    global t
-    t = OpCount(irc, plugins)
-    return True
-
-def get_instance():
-    global t
-    return t
-
-def shutdown():
-    global t
-    t.shutdown()
-    return True

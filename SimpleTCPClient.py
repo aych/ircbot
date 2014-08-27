@@ -33,7 +33,7 @@ class SimpleTCPClient(object):
 
   def push(self, data):
     try:
-      self.s.send(data)
+      self.s.send(data.encode('utf8'))
     except IOError as e:
       self.on_error(e)
       self.s.close()

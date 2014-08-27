@@ -12,6 +12,8 @@ import random
 # user.logged_in
 # user.hostmask
 
+PLUGIN_CLASS = "Auth"
+
 FLAGS_NONE = ''
 FLAGS_ADMIN = 'A'
 FLAGS_OPERATOR = 'O'
@@ -29,9 +31,9 @@ class Flags(object):
         return wrapped_f
 
 
-class Auth():
-    def __init__(self, irc, plugins):
-        self.plugins = plugins
+class Auth(object):
+    def __init__(self, irc):
+        self.plugins = irc.plugins
         self.irc = irc
         self.auth = self
         self.auth_users = {}
@@ -272,21 +274,3 @@ class Auth():
             return
         del self.auth_users[target]
         
-
-def initialize(irc, plugins):
-    try:
-        global plugin_auth
-        plugin_auth = Auth(irc, plugins)
-        return True
-    except Exception, e:
-        irc.set_exception(e)
-        return False
-
-def get_instance():
-    global plugin_auth
-    return plugin_auth
-
-def shutdown():
-    global plugin_auth
-    plugin_auth.shutdown()
-    return True

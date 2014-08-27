@@ -1,7 +1,12 @@
 import string
+import os
+import re
+import sys
+import traceback
 from SimpleTCPClient import SimpleTCPClient
 
 NEWLINE = "\r\n"
+NEWLINE_RE = "[\r\n]+"
 
 class Event(object):
     def __init__(self, func):
@@ -70,8 +75,8 @@ class IRCClient(SimpleTCPClient):
   def on_recv(self, data):
     self.buffer += data
 
-    while NEWLINE in self.buffer:
-      parts = self.buffer.split(NEWLINE, 1)
+    while re.search(NEWLINE_RE, self.buffer) is not None:
+      parts = re.split(NEWLINE_RE, self.buffer, 1)
       self.buffer = parts[1]
       self.on_packet(parts[0])
 
@@ -180,6 +185,7 @@ class IRCClient(SimpleTCPClient):
         elif cmd == "376":
           self.common_msg['message'] = rest
           self.on_motd_end(rest)
+          self.on_logged_in()
         elif cmd == "401":
           self.common_msg['destination'] = cmdparams[3]
           self.common_msg['message'] = rest
@@ -187,7 +193,7 @@ class IRCClient(SimpleTCPClient):
         elif cmd == "433":
           self.on_nickname_in_use()
         else:
-          print '-> UNRECOGNIZED NUMERIC <-'
+          self.on_unrecognized_numeric(packet)
       else:
         identifiers = cmdparams[0]
         if '!' in identifiers:
@@ -235,11 +241,18 @@ class IRCClient(SimpleTCPClient):
             cmdparams[2] = nick
           self.common_msg['destination'] = cmdparams[2]
           self.common_msg['message'] = rest
-          self.on_privmsg(cmdparams[2], nick, user, host, rest)
-          if len(rest) > 0:
-            parts = rest.split(' ')
-            cmd = parts[0].upper()
-            self.on_command(cmdparams[2], nick, user, host, cmd, parts)
+          try:
+            self.on_privmsg(cmdparams[2], nick, user, host, rest)
+            if len(rest) > 0:
+              parts = rest.split(' ')
+              cmd = parts[0].upper()
+              self.on_command(cmdparams[2], nick, user, host, cmd, parts)
+          except Exception, e:
+            tb = traceback.format_exc()
+            print tb
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            self.privmsg(cmdparams[2], "Exception (%s, %s): %s" % (fname, exc_tb.tb_lineno, e))
         elif cmdparams[1] == 'QUIT':
           self.common_msg['message'] = rest
           self.on_quit(nick, user, host, rest)
@@ -248,14 +261,22 @@ class IRCClient(SimpleTCPClient):
           self.common_msg['message'] = rest
           self.on_topic(cmdparams[2], nick, user, host, rest)
         else:
-          print '-> UNRECOGNIZED NON-NUMERIC <-'
+          self.on_unrecognized_command(packet)
     else:
       cmd = params[0].rstrip(None)
 
       if cmd == 'PING':
         self.send_data("PONG %s" % params[1])
       else:
-        print '-> UNRECOGNIZED NON-COMMAND <-'
+        self.on_unrecognized_command(packet)
+
+  @Event
+  def on_unrecognized_command(self, data):
+    pass
+
+  @Event
+  def on_unrecognized_numeric(self, data):
+    pass
 
   @Event
   def on_connected(self, host, port):

@@ -3,6 +3,8 @@ import threading
 import random
 import collections
 
+PLUGIN_CLASS = 'Cards'
+
 PHASE_GO = 0
 PHASE_JOIN = 1
 PHASE_PREGAME = 2
@@ -29,10 +31,10 @@ PHASE_DURATION = {PHASE_GO: 1.0,
                   PHASE_WINNER: 1.0,
                   PHASE_POSTWINNER: 1.0}
 
-class Cards():
-  def __init__(self, irc, plugins):
+class Cards(object):
+  def __init__(self, irc):
     self.irc = irc
-    self.plugins = plugins
+    self.plugins = irc.plugins
     self.irc.on_privmsg += self.on_privmsg
     self.timer = None
     self.channel = None
@@ -96,6 +98,7 @@ class Cards():
 
   def shutdown(self):
     self.irc.on_privmsg -= self.on_privmsg
+    return True
 
   def on_privmsg(self, destination, nick, user, host, message):
     if message.startswith("cards.start"):
@@ -133,7 +136,7 @@ class Cards():
           tp = []
           for p in pieces:
             ix = int(p)-1
-            if ix < len(self.hands[nick]):
+            if ix < len(self.hands[nick]) and ix >= 0:
               fill_in = fill_in.replace('_', self.hands[nick][ix], 1)
               tp.append(self.hands[nick][ix])
             else:
@@ -320,17 +323,3 @@ class Cards():
     self.complete_answers = {}
     self.czar = None    
     self.on_tick()
-
-def initialize(irc, plugins):
-  global c
-  c = Cards(irc, plugins)
-  return True
-
-def get_instance():
-  global c
-  return c
-
-def shutdown():
-  global c
-  c.shutdown()
-  return True

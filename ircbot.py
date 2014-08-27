@@ -8,33 +8,32 @@ import config
 from plugins.auth import Flags, FLAGS_ADMIN, FLAGS_NONE
 
 
-class IRCBot():
+class IRCBot(IRCClient):
     def __init__(self):
+        super(IRCBot, self).__init__()
         self.plugins = {}
-        self.irc = IRCClient()
 
         # We require auth, so might as well load it.
         # TODO: Make plugins to load at runtime part of the config.
         for plugin in config.AUTOLOAD:
             self.internal_load(plugin)
         if 'auth' in self.plugins:
-            self.auth = self.plugins['auth'].get_instance()
+            self.auth = self.plugins['auth']
 
-        self.irc.on_disconnected += self.irc_disconnected
-        self.irc.on_privmsg += self.irc_privmsg
-        self.irc.on_nickname_in_use += self.irc_nickname_in_use
-
-        self.connect()
+        self.on_disconnected += self.irc_disconnected
+        self.on_logged_in += self.irc_logged_in
+        self.on_privmsg += self.irc_privmsg
+        self.on_nickname_in_use += self.irc_nickname_in_use
 
     def connect(self):
         #try:
         self.current_nick = config.IRC_NICK
 
-        self.irc.irc_connect(config.IRC_SERVER,
-                                 config.IRC_PORT,
-                                 config.IRC_NICK,
-                                 config.IRC_USERNAME,
-                                 config.IRC_REALNAME)
+        self.irc_connect(config.IRC_SERVER,
+                         config.IRC_PORT,
+                         config.IRC_NICK,
+                         config.IRC_USERNAME,
+                         config.IRC_REALNAME)
         #except OSError, e:
         #self.irc_disconnected()
         #except Exception, e:
@@ -45,27 +44,22 @@ class IRCBot():
 
     def internal_load(self, plugin):
         if plugin in self.plugins:
-            print "%s is already loaded"
             return False
-        print "Attempting to load: %s" % plugin
         try:
             _file, _path, _description = imp.find_module(plugin, ['plugins/'])
         except ImportError:
-            print "No plugin with the name of %s found" % plugin
             return False
         obj = None
         try:
             obj = imp.load_module(plugin, _file, _path, _description)
         except Exception, e:
-            print "Plugin found, but load failed: %s" % e
             return False
         try:
-            if obj.initialize(self.irc, self.plugins):
-                print "%s loaded" % plugin
-                self.plugins[plugin] = obj
-                return True
-            else:
-                print "%s failed to load: %s" % (plugin, self.irc.exception)
+            plugin_name = obj.PLUGIN_CLASS
+            plugin_obj = getattr(obj, plugin_name)
+            plugin_instance = plugin_obj(self)
+            self.plugins[plugin] = plugin_instance
+            return True
         except Exception, e:
             print "%s failed to load: %s" % (plugin, e)
         return False
@@ -81,37 +75,37 @@ class IRCBot():
     def unload_plugin(self, plugin, **kwargs):
         if not self.auth.flag_allow_action(kwargs['flags_allow'], kwargs['flags_deny'], kwargs['default_allow']):
             return
-        destination = self.irc.common_msg['destination']
+        destination = self.common_msg['destination']
         if plugin in self.plugins:
             if self.plugins[plugin].shutdown():
                 pass
             else:
-                self.irc.privmsg(destination, "Shutdown during unload failed for %s" % plugin)
-            self.irc.privmsg(destination, "%s unloaded" % plugin)
+                self.privmsg(destination, "Shutdown during unload failed for %s" % plugin)
+            self.privmsg(destination, "%s unloaded" % plugin)
             del(sys.modules[plugin])
             self.plugins.pop(plugin, None)
         else:
-            self.irc.privmsg(destination, "%s wasn't loaded" % plugin)
+            self.privmsg(destination, "%s wasn't loaded" % plugin)
 
     @Flags(FLAGS_ADMIN, FLAGS_NONE, False)
     def join_channel(self, channel, **kwargs):
         if not self.auth.flag_allow_action(kwargs['flags_allow'], kwargs['flags_deny'], kwargs['default_allow']):
             return
-        self.irc.join_channel(channel)
+        super(IRCBot, self).join_channel(channel)
 
     @Flags(FLAGS_ADMIN, FLAGS_NONE, True)
     def list_plugins(self, **kwargs):
         if not self.auth.flag_allow_action(kwargs['flags_allow'], kwargs['flags_deny'], kwargs['default_allow']):
             return
-        self.irc.privmsg(self.irc.common_msg['destination'], "Plugins loaded: %s" % self.plugins.keys())
+        self.privmsg(self.common_msg['destination'], "Plugins loaded: %s" % self.plugins.keys())
 
     def irc_nickname_in_use(self):
         if self.current_nick == config.IRC_NICK:
             self.current_nick = config.IRC_ALT_NICK
-            self.irc.change_nick(config.IRC_ALT_NICK)
+            self.change_nick(config.IRC_ALT_NICK)
         else:
             self.current_nick = config.IRC_NICK
-            self.irc.change_nick(config.IRC_NICK)
+            self.change_nick(config.IRC_NICK)
 
     def irc_privmsg(self, destination, nick, user, host, message):
         parts = message.split(' ')
@@ -120,7 +114,7 @@ class IRCBot():
         if cmd == 'LOAD':
             plugin = parts[1]
             if self.load_plugin(plugin):
-                self.irc.privmsg(destination, "Plugin loaded: %s" % plugin)
+                self.privmsg(destination, "Plugin loaded: %s" % plugin)
         elif cmd == 'UNLOAD':
             plugin = parts[1]
             self.unload_plugin(plugin)
@@ -129,14 +123,19 @@ class IRCBot():
             if plugin in self.plugins:
                 self.unload_plugin(plugin)
             if self.load_plugin(plugin):
-                self.irc.privmsg(destination, "Plugin loaded: %s" % plugin)
+                self.privmsg(destination, "Plugin loaded: %s" % plugin)
         elif cmd == 'PLUGINS':
             self.list_plugins()
         elif cmd == 'JOIN':
             self.join_channel(parts[1])
 
+    def irc_logged_in(self):
+        [super(IRCBot, self).join_channel(c) for c in config.AUTOJOIN]
+
     def irc_disconnected(self):
         print "Disconnected."
         self.connect()
 
-irc = IRCBot()
+if __name__ == '__main__':
+  irc = IRCBot()
+  irc.connect()

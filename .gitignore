@@ -3,4 +3,8 @@ config.py
 .idea/*
 *.save
 plugins/data/*
-plugins/mysqltest.py
+plugins/mysqltest.py*
+plugins/dnsbrute.py
+plugins/ircgearman.py
+plugins/test*
+plugins/data/dnslist.txt

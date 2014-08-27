@@ -1,10 +1,37 @@
+from functools import wraps
+import errno
+import os
+import signal
 import re
 from collections import deque
 
+PLUGIN_CLASS = 'ChannelBuffer'
+
+class TimeoutError(Exception):
+    pass
+
+def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(error_message)
+
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.setitimer(signal.ITIMER_REAL,seconds) #used timer instead of alarm
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wraps(func)(wrapper)
+
+    return decorator
+
 class ChannelBuffer():
-    def __init__(self, irc, plugins):
+    def __init__(self, irc):
         self.irc = irc
-        self.plugins = plugins
+        self.plugins = irc.plugins
         self.buffer = {}
         self.buffer_size = 500
 
@@ -14,6 +41,7 @@ class ChannelBuffer():
     def shutdown(self):
         self.irc.on_privmsg -= self.handle_privmsg
         self.irc.on_command += self.handle_command
+        return True
 
     def color(self, text):
         text = text.replace('{bold}', '\x02')
@@ -41,7 +69,8 @@ class ChannelBuffer():
         if destination[0] == '#':
             if destination not in self.buffer:
                 self.buffer[destination] = deque()
-            self.buffer[destination].append({'nick': nick, 'user': user, 'host': host, 'message': message})
+            if not message.startswith('s/'):
+                self.buffer[destination].append({'nick': nick, 'user': user, 'host': host, 'message': message})
             if len(self.buffer[destination]) > self.buffer_size:
                 self.buffer[destination].popleft()
 
@@ -55,23 +84,29 @@ class ChannelBuffer():
                 flags = ''
 
             # Find if the line exists in the buffer.
-            ret = self.regex_seek_in_buffer(destination, 'message', regex, 'i' in flags)
-            if ret is not None:
-                msg = ret['message']
-                if 'i' in flags:
-                    m = re.search(regex, msg, re.IGNORECASE)
-                else:
-                    m = re.search(regex, msg)
-                if m is not None:
-                    if 'g' in flags:
-                        msg = msg.replace(m.group(), replace_with)
-                    else:
-                        msg = msg.replace(m.group(), replace_with, 1)
-                    self.irc.privmsg(destination, self.color('<{bold}%s{bold}> %s' % (ret['nick'], msg)))
-                else:
-                    pass
-            else:
-                pass
+            try:
+              ret = self.regex_seek_in_buffer(destination, 'message', regex, 'i' in flags)
+              if ret is not None:
+                  msg = ret['message']
+                  if 'i' in flags:
+                      m = re.search(regex, msg, re.IGNORECASE)
+                  else:
+                      m = re.search(regex, msg)
+                  if m is not None:
+                      #if 'g' in flags:
+                      #    msg = msg.replace(m.group(), replace_with)
+                      #else:
+                      #    msg = msg.replace(m.group(), replace_with, 1)
+                      #if len(msg) > 255:
+                      #  msg = msg[0:255]
+                      msg = re.sub(regex, replace_with, msg)
+                      self.irc.privmsg(destination, self.color('<{bold}%s{bold}> %s' % (ret['nick'], msg)))
+                  else:
+                      pass
+              else:
+                  pass
+            except Exception, e:
+              self.irc.privmsg(destination, "Timed out on regex search.")
 
     def handle_command(self, destination, nick, user, host, command, params):
         if command == 'SEEK':
@@ -100,10 +135,11 @@ class ChannelBuffer():
                     return tmp[i]
         return None
 
+    @timeout(1.0)
     def regex_seek_in_buffer(self, channel, param, needle, case_insensitive=False):
         if self.has_buffer(channel):
             tmp = self.buffer[channel]
-            for i in range(-2, 0 - len(tmp) - 1, -1):
+            for i in range(-1, 0 - len(tmp) - 1, -1):
                 if case_insensitive:
                     m = re.search(needle, tmp[i][param], re.IGNORECASE)
                 else:
@@ -111,21 +147,3 @@ class ChannelBuffer():
                 if m is not None:
                     return tmp[i]
         return None
-
-def initialize(irc, plugins):
-    try:
-        global plugin_channel_buffer
-        plugin_channel_buffer = ChannelBuffer(irc, plugins)
-        return True
-    except Exception, e:
-        irc.set_exception(e)
-        return False
-
-def get_instance():
-    global plugin_channel_buffer
-    return plugin_channel_buffer
-
-def shutdown():
-    global plugin_channel_buffer
-    plugin_channel_buffer.shutdown()
-    return True

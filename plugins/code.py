@@ -4,18 +4,21 @@ import StringIO
 
 from auth import Flags, FLAGS_ADMIN, FLAGS_NONE
 
-class Code():
-    def __init__(self, irc, plugins):
+PLUGIN_CLASS = 'Code'
+
+class Code(object):
+    def __init__(self, irc):
         self.irc = irc
-        self.plugins = plugins
+        self.plugins = irc.plugins
         self.irc.on_command += self.handle_command
-        self.auth = plugins['auth'].get_instance()
+        self.auth = self.plugins['auth']
         self.recording = False
         self.recording_nick = ''
         self.console_mode = False
 
     def shutdown(self):
         self.irc.on_command -= self.handle_command
+        return True
 
     def handle_command(self, destination, nick, user, host, command, params):
         # self.irc.privmsg(destination, "code.handle_command(%s)" % command)
@@ -108,21 +111,3 @@ class Code():
         s = codeErr.getvalue()
         if len(s) > 0:
             self.irc.privmsg(self.irc.common_msg['destination'], "Error: %s" % s)
-
-def initialize(irc, plugins):
-    try:
-        global c
-        c = Code(irc, plugins)
-        return True
-    except Exception, e:
-        irc.set_exception(e)
-        return False
-
-def get_instance():
-    global c
-    return c
-
-def shutdown():
-    global c
-    c.shutdown()
-    return True

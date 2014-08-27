@@ -1,13 +1,16 @@
 import hashlib
 
-class Test():
-    def __init__(self, irc, plugins):
+PLUGIN_CLASS = 'Test'
+
+class Test(object):
+    def __init__(self, irc):
         self.irc = irc
-        self.plugins = plugins
+        self.plugins = irc.plugins
         self.irc.on_privmsg += self.testfunc
 
     def shutdown(self):
         self.irc.on_privmsg -= self.testfunc
+        return True
 
     def md5(self, text):
         return hashlib.md5(text).hexdigest()
@@ -18,17 +21,3 @@ class Test():
         if cmd == 'MD5':
             rest = message[len(cmd) + 1:]
             self.irc.privmsg(destination, "%s" % self.md5(rest))
-
-def initialize(irc, plugins):
-    global t
-    t = Test(irc, plugins)
-    return True
-
-def get_instance():
-    global t
-    return t
-
-def shutdown():
-    global t
-    t.shutdown()
-    return True
